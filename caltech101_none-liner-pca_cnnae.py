@@ -140,7 +140,7 @@ def mk_nn_model2(x, y_, rep, is_training):
         pool3_out = pool3.output()
         # representation is (4, 4, 16) i.e. 256-dimensional
 
-        pool3_out_update = tf.concat([pool3_out, rep], 0)
+        pool3_out_update = tf.concat([pool3_out, rep], 3)
         pool3_out_update = tf.reshape(pool3_out_update, [-1, 4, 4, 32])
 
         conv_t1 = Conv2Dtranspose(pool3_out_update, (8, 8), 32, 16, (3, 3), is_training, activation='relu')
@@ -161,7 +161,7 @@ def mk_nn_model2(x, y_, rep, is_training):
         cross_entropy = -1. * x_image * p - (1. - x_image) * q
         loss = tf.reduce_mean(cross_entropy)
 
-        return loss, decoded
+        return loss, decoded, pool3_out_update
 
 
 def next_batch(num, data, labels):
@@ -191,12 +191,14 @@ if __name__ == '__main__':
 
     # Optimise
     loss, decoded, first_rep = mk_nn_model(x, y_,is_training)
-    optim_vars1 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca1")
-    train_step = tf.train.AdamOptimizer(1e-3).minimize(loss, var_list=optim_vars1)
+    #optim_vars1 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca1")
+    #train_step = tf.train.AdamOptimizer(1e-3).minimize(loss, var_list=optim_vars1)
+    train_step = tf.train.AdamOptimizer(1e-3).minimize(loss)
 
-    loss2, decoded2 = mk_nn_model2(x, y_, rep_, is_training)
-    optim_vars2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca2")
-    train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2, var_list=optim_vars2)
+    loss2, decoded2, aaaaa = mk_nn_model2(x, y_, rep_, is_training)
+    #optim_vars2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca2")
+    #train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2, var_list=optim_vars2)
+    train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2)
 
 
     # init
@@ -254,12 +256,12 @@ if __name__ == '__main__':
             for i in range(int(len(X_train) / 32)):
                 batch_xs, batch_ys = next_batch(32, X_train, Y_train)
 
-                print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
                 rep_temp = first_rep.eval({x: batch_xs, y_: batch_ys, is_training: True})
                 print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',rep_temp.shape )
-                print('111111111111111111111111111111111111')
-                train_step2.run({x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True})
-                print('222222222222222222222222222222222222')
+
+                sess.run(train_step2, feed_dict={x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True})
+
+
             if j % 1 == 0:
                 train_loss2 = loss2.eval({x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True})
                 print('  epochs, loss = %6d: %6.3f' % (j, train_loss2))
