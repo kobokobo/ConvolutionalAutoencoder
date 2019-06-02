@@ -16,7 +16,6 @@ import tensorflow as tf
 from my_nn_lib import Convolution2D, MaxPooling2D
 from my_nn_lib import FullConnected, ReadOutLayer
 
-from keras.datasets import cifar10
 
 # Up-sampling 2-D Layer (deconvolutoinal Layer)
 class Conv2Dtranspose(object):
@@ -157,7 +156,8 @@ if __name__ == '__main__':
 
 
         # generate decoded image with test data
-        fd = {x: X_test, y_: Y_test, is_training: True}
+        #fd = {x: X_test, y_: Y_test, is_training: True}
+        fd = {x: batch_xs, y_: batch_ys, is_training: True}
         decoded_imgs = decoded.eval(fd)
         print('loss (test) = ', loss.eval(fd))
      
@@ -167,7 +167,9 @@ if __name__ == '__main__':
     for i in range(n):
         # display original
         ax = plt.subplot(2, n, i + 1)
-        plt.imshow(x_test[i].reshape(32, 32, 3))
+        #plt.imshow(x_test[i].reshape(32, 32, 3))
+        plt.imshow(batch_xs[i].reshape(32, 32, 3))
+
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
