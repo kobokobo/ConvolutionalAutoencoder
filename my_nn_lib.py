@@ -97,6 +97,44 @@ class FullConnected(object):
         
         return self.output
 
+
+# Full-connected Layer
+class FullConnected_sigmoid(object):
+    def __init__(self, input, n_in, n_out):
+        self.input = input
+
+        w_h = tf.Variable(tf.truncated_normal([n_in, n_out],
+                                              mean=0.0, stddev=0.05), trainable=True)
+        b_h = tf.Variable(tf.zeros([n_out]), trainable=True)
+
+        self.w = w_h
+        self.b = b_h
+        self.params = [self.w, self.b]
+
+    def output(self):
+        linarg = tf.matmul(self.input, self.w) + self.b
+        self.output = tf.nn.sigmoid(linarg)
+
+        return self.output
+
+class FullConnected_sigmoid_upscale(object):
+    def __init__(self, input, n_in, n_out):
+        self.input = input
+
+        w_h = tf.Variable(tf.truncated_normal([n_in, n_out],
+                                              mean=0.0, stddev=0.05), trainable=True)
+        b_h = tf.Variable(tf.zeros([n_out]), trainable=True)
+
+        self.w = w_h
+        self.b = b_h
+        self.params = [self.w, self.b]
+
+    def output(self):
+        linarg = tf.matmul(self.input, self.w) + self.b
+        self.output = 2.0 * tf.nn.sigmoid(linarg) - 1.0
+
+        return self.output
+
 # Read-out Layer
 class ReadOutLayer(object):
     def __init__(self, input, n_in, n_out):

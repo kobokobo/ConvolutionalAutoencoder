@@ -15,6 +15,22 @@ import tensorflow as tf
 
 from my_nn_lib import Convolution2D, MaxPooling2D
 from my_nn_lib import FullConnected, ReadOutLayer
+from my_nn_lib import FullConnected_sigmoid_upscale
+
+
+
+bit_length = 15
+pncode0 = np.array([-1,  -1,  -1,   1,  -1,  -1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1], dtype = 'float')
+pncode1 = np.array([-1,  -1,   1,  -1,  -1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1], dtype = 'float')
+pncode2 = np.array([-1,   1,  -1,  -1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1], dtype = 'float')
+pncode3 = np.array([ 1,  -1,  -1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1], dtype = 'float')
+pncode4 = np.array([-1,  -1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1], dtype = 'float')
+pncode5 = np.array([-1,   1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1,  -1], dtype = 'float')
+pncode6 = np.array([ 1,   1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1,  -1,  -1], dtype = 'float')
+pncode7 = np.array([ 1,  -1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1,  -1,  -1,   1], dtype = 'float')
+pncode8 = np.array([-1,   1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1,  -1,  -1,   1,   1], dtype = 'float')
+pncode9 = np.array([ 1,  -1,   1,   1,   1,   1,  -1,  -1,  -1,   1,  -1,  -1,   1,   1,  -1], dtype = 'float')
+
 
 
 # Up-sampling 2-D Layer (deconvolutoinal Layer)
@@ -69,9 +85,7 @@ def model(X, w_e, b_e, w_d, b_d):
     return encoded, decoded
 
 def mk_nn_model(x, y_,is_training):
-
-    with tf.variable_scope('pca1'):
-
+    with tf.variable_scope('cae'):
         # Encoding phase
         x_image = tf.reshape(x, [-1, 32*32*3])
         conv1 = Convolution2D(x, (32, 32), 3, 64, (3, 3), is_training, activation='relu')
@@ -79,6 +93,7 @@ def mk_nn_model(x, y_,is_training):
 
         pool1 = MaxPooling2D(conv1_out)
         pool1_out = pool1.output()
+        pool1_out_flat = tf.reshape(pool1_out, [-1, 16*16*64])
         # representation is (16, 16, 64) i.e. 16384-dimensional
 
         conv2 = Convolution2D(pool1_out, (16, 16), 64, 32, (3, 3), is_training, activation='relu')
@@ -86,6 +101,7 @@ def mk_nn_model(x, y_,is_training):
 
         pool2 = MaxPooling2D(conv2_out)
         pool2_out = pool2.output()
+        pool2_out_flat = tf.reshape(pool2_out, [-1, 8*8*32])
         # representation is (8, 8, 32) i.e. 2048-dimensional
 
         conv3 = Convolution2D(pool2_out, (8, 8), 32, 16, (3, 3), is_training, activation='relu')
@@ -93,6 +109,7 @@ def mk_nn_model(x, y_,is_training):
 
         pool3 = MaxPooling2D(conv3_out)
         pool3_out = pool3.output()
+        pool3_out_flat = tf.reshape(pool3_out, [-1, 4*4*16])
         # representation is (4, 4, 16) i.e. 256-dimensional
 
         conv_t1 = Conv2Dtranspose(pool3_out, (8, 8), 16, 16, (3, 3), is_training, activation='relu')
@@ -113,10 +130,18 @@ def mk_nn_model(x, y_,is_training):
         cross_entropy = -1. * x_image * p - (1. - x_image) * q
         loss = tf.reduce_mean(cross_entropy)
 
-        return loss, decoded, pool3_out
+        feature_descriptor = tf.concat([pool1_out_flat, pool2_out_flat, pool3_out_flat], 1)
 
-def mk_nn_model2(x, y_, rep, is_training):
-    with tf.variable_scope('pca2'):
+        return loss, decoded, feature_descriptor
+
+
+def mk_nn_model2(rep, y_, is_training):
+    with tf.variable_scope('fc-pn'):
+
+
+        fc1 = FullConnected_sigmoid_upscale(rep, (1, 18688), 1, 15, (3, 3), is_training, activation='relu')
+
+        '''
         # Encoding phase
         x_image = tf.reshape(x, [-1, 32 * 32 * 3])
         conv1 = Convolution2D(x, (32, 32), 3, 64, (3, 3), is_training, activation='relu')
@@ -160,8 +185,8 @@ def mk_nn_model2(x, y_, rep, is_training):
         q = tf.log(tf.clip_by_value((1. - decoded), 1e-10, 1.0))
         cross_entropy = -1. * x_image * p - (1. - x_image) * q
         loss = tf.reduce_mean(cross_entropy)
-
-        return loss, decoded, pool3_out_update
+        '''
+        return loss, decoded
 
 
 def next_batch(num, data, labels):
@@ -171,6 +196,39 @@ def next_batch(num, data, labels):
     data_shuffle = [data[ i] for i in idx]
     labels_shuffle = [labels[ i] for i in idx]
     return np.asarray(data_shuffle), np.asarray(labels_shuffle)
+
+
+
+# setting of feed_dict (parameter)
+def set_feed(images, labels, prob, pn):
+
+    pncode = np.zeros((0, bit_length))
+    for i in range(labels.shape[0]):
+
+        if (labels[i,:] == [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode0.reshape(1,-1)]
+        elif (labels[i,:] == [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode1.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 1, 0, 0, 0, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode2.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode3.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 1, 0, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode4.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 0, 1, 0, 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode5.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 0, 0, 1 , 0, 0, 0]).all():
+            pncode = np.r_[pncode, pncode6.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 0, 0, 0, 1, 0, 0]).all():
+            pncode = np.r_[pncode, pncode7.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]).all():
+            pncode = np.r_[pncode, pncode8.reshape(1,-1)]
+        elif (labels[i,:] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]).all():
+            pncode = np.r_[pncode, pncode9.reshape(1,-1)]
+
+    # print(pncode.shape)
+    return {x: images, y_: pncode, y_org : labels, keep_prob: prob, pn_: pn}
+
 
 if __name__ == '__main__':
 
@@ -186,20 +244,22 @@ if __name__ == '__main__':
     x = tf.placeholder(tf.float32, shape=(None, 32, 32, 3), name="x")  # image data
     y_ = tf.placeholder(tf.float32, shape=(None, nums), name="y_")  # label (teaching data)
     is_training = tf.placeholder(dtype=tf.bool)
-    rep_ = tf.placeholder(tf.float32, shape=(None, 4, 4, 16), name="rep_")  # image data
+    rep_ = tf.placeholder(tf.float32, shape=(None, 18688), name="rep_")  # image data
 
 
     # Optimise
-    loss, decoded, first_rep = mk_nn_model(x, y_,is_training)
-    #optim_vars1 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca1")
-    #train_step = tf.train.AdamOptimizer(1e-3).minimize(loss, var_list=optim_vars1)
-    train_step = tf.train.AdamOptimizer(1e-3).minimize(loss)
+    loss, decoded, feature_rep = mk_nn_model(x, y_, is_training)
+    optim_vars1 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="cae")
+    train_step = tf.train.AdamOptimizer(1e-3).minimize(loss, var_list=optim_vars1)
 
-    loss2, decoded2, aaaaa = mk_nn_model2(x, y_, rep_, is_training)
-    #optim_vars2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca2")
-    #train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2, var_list=optim_vars2)
-    train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2)
 
+
+    '''
+    loss2, decoded2 = mk_nn_model2(x, y_, rep_, is_training)
+    optim_vars2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pca2")
+    train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2, var_list=optim_vars2)
+    #train_step2 = tf.train.AdamOptimizer(1e-3).minimize(loss2)
+    '''
 
     # init
     init = tf.initialize_all_variables()
@@ -212,28 +272,26 @@ if __name__ == '__main__':
         for j in range(epochs):
             for i in range(int(len(X_train)/32)):
                 batch_xs, batch_ys = next_batch(32, X_train, Y_train)
-
                 train_step.run({x: batch_xs, y_: batch_ys, is_training: True})
             if j % 1 == 0:
-                train_loss= loss.eval({x: batch_xs, y_: batch_ys, is_training: True})
+                train_loss = loss.eval({x: batch_xs, y_: batch_ys, is_training: True})
                 print('  epochs, loss = %6d: %6.3f' % (j, train_loss))
 
 
         # generate decoded image with test data
-        #fd = {x: X_test, y_: Y_test, is_training: True}
         fd = {x: batch_xs, y_: batch_ys, is_training: True}
         decoded_imgs = decoded.eval(fd)
         print('loss (test) = ', loss.eval(fd))
 
 
-        x_test = X_test
+        x_test = batch_xs
+        y_test = batch_ys
         n = 10  # how many digits we will display
         plt.figure(figsize=(20, 4))
         for i in range(n):
             # display original
             ax = plt.subplot(2, n, i + 1)
-            #plt.imshow(x_test[i].reshape(32, 32, 3))
-            plt.imshow(batch_xs[i].reshape(32, 32, 3))
+            plt.imshow(x_test[i].reshape(32, 32, 3))
 
             plt.gray()
             ax.get_xaxis().set_visible(False)
@@ -250,38 +308,52 @@ if __name__ == '__main__':
         plt.savefig('caltech101_cae_first.png')
 
 
+        # start training
+        for step in range(10000):
 
+            batch_xs, batch_ys = next_batch(32, X_train, Y_train)
+            rep_temp = train_step.eval({x: batch_xs, y_: batch_ys, is_training: True})
+
+            batch_xs, batch_ys = next_batch(32, X_train, Y_train)
+            fd = set_feed(batch_xs[0], batch_ys[1], 0.5, pn_all)
+
+            _, loss = sess.run([train_step, cross_entoropy], feed_dict=fd)
+            # _, loss, temp = sess.run([train_step, cross_entoropy, W_fc3], feed_dict=fd)
+            # print("xxxxx debug xxxxx", temp)
+
+            if step % 100 == 0:
+                acc, w_summary = sess.run([accuracy_step, summary], feed_dict=test_fd)
+                print("step=", step, "loss=", loss, "acc=", acc)
+                tw.add_summary(w_summary, step)
+
+
+        pn_all = np.c_[pncode0, pncode1, pncode2, pncode3, pncode4, pncode5, pncode6, pncode7, pncode8, pncode9]
+        test_fd = set_feed(mnist.test.images, mnist.test.labels, 1, pn_all)
+
+
+        '''
         # Train2
         for j in range(epochs):
             for i in range(int(len(X_train) / 32)):
                 batch_xs, batch_ys = next_batch(32, X_train, Y_train)
-
                 rep_temp = first_rep.eval({x: batch_xs, y_: batch_ys, is_training: True})
-                print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',rep_temp.shape )
-
                 sess.run(train_step2, feed_dict={x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True})
-
-
             if j % 1 == 0:
                 train_loss2 = loss2.eval({x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True})
                 print('  epochs, loss = %6d: %6.3f' % (j, train_loss2))
 
 
         # generate decoded image with test data
-        # fd = {x: X_test, y_: Y_test, is_training: True}
-        rep_temp = first_rep.eval({x: batch_xs, y_: batch_ys, is_training: True})
-        fd2 = {x: batch_xs, y_: batch_ys, rep_:rep_temp, is_training: True}
-        decoded_imgs2 = decoded2.eval(fd2)
-        print('loss (test) = ', loss2.eval(fd2))
+        rep_temp = first_rep.eval(fd)
+        decoded_imgs2 = decoded2.eval({x: x_test, y_: y_test, rep_:rep_temp, is_training: True})
+        print('loss (test) = ', loss2.eval({x: x_test, y_: y_test, rep_:rep_temp, is_training: True}))
 
-        x_test = X_test
         n = 10  # how many digits we will display
         plt.figure(figsize=(20, 4))
         for i in range(n):
             # display original
             ax = plt.subplot(2, n, i + 1)
-            # plt.imshow(x_test[i].reshape(32, 32, 3))
-            plt.imshow(batch_xs[i].reshape(32, 32, 3))
+            plt.imshow(x_test[i].reshape(32, 32, 3))
 
             plt.gray()
             ax.get_xaxis().set_visible(False)
@@ -296,3 +368,4 @@ if __name__ == '__main__':
 
         # plt.show()
         plt.savefig('caltech101_cae_second.png')
+        '''
