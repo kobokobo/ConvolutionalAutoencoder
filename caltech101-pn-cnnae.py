@@ -138,11 +138,14 @@ def mk_nn_model(x, y_,is_training):
 def mk_nn_model2(x2, y2_):
     with tf.variable_scope('fc-pn'):
 
-        fc1 = FullConnected(x2, 18688, 1024)
-        fc1_out = fc1.output()
+        #fc1 = FullConnected(x2, 18688, 1024)
+        #fc1_out = fc1.output()
 
-        y_conv = FullConnected_sigmoid_upscale(fc1_out, 1024, 15)
-        y_conv_out = y_conv.output()
+        fc1 = FullConnected_sigmoid_upscale(x2, 18688, 15)
+        y_conv_out = fc1.output()
+
+        #y_conv = FullConnected_sigmoid_upscale(fc1_out, 1024, 15)
+        #y_conv_out = y_conv.output()
 
         mean_square_error = tf.reduce_sum(tf.pow(y_conv_out - y2_, 2) / (2.0 * tf.cast(tf.shape(y2_)[0], tf.float32)))
         return mean_square_error, y_conv_out
